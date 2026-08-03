@@ -213,6 +213,10 @@
         node.onclick = () => selectSession(session.id, session.title);
         $("sessions").appendChild(node);
       });
+      if (!activeSession && data.sessions.length > 0) {
+        const session = data.sessions[0];
+        await selectSession(session.id, session.title);
+      }
     }
 
     async function selectSession(id, title) {
@@ -257,13 +261,18 @@
       });
     }
 
-    $("newSession").onclick = async () => {
+    async function createSession() {
       const userId = $("userId").value.trim();
       const data = await api("/api/sessions", {
         method: "POST",
         body: JSON.stringify({ user_id: userId, title: "Agent 会话" })
       });
       await selectSession(data.session.id, data.session.title);
+      return data.session;
+    }
+
+    $("newSession").onclick = async () => {
+      await createSession();
     };
 
     $("refresh").onclick = () => Promise.all([loadSessions(), loadMessages()]);
@@ -278,14 +287,18 @@
 
     $("chatForm").onsubmit = async (event) => {
       event.preventDefault();
-      if (!activeSession || busy) return;
+      if (busy) return;
       const content = $("input").value.trim();
       if (!content) return;
       busy = true;
       $("send").disabled = true;
+      $("send").textContent = "发送中";
       $("input").value = "";
-      addMessage({ role: "user", content });
       try {
+        if (!activeSession) {
+          await createSession();
+        }
+        addMessage({ role: "user", content });
         const data = await api(`/api/sessions/${activeSession}/messages`, {
           method: "POST",
           body: JSON.stringify({ user_id: $("userId").value.trim(), content })
@@ -297,6 +310,7 @@
       } finally {
         busy = false;
         $("send").disabled = false;
+        $("send").textContent = "发送";
       }
     };
 
