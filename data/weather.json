@@ -1,0 +1,34 @@
+{
+  "_aliases": {
+    "tokyo": "东京",
+    "東京": "东京",
+    "osaka": "大阪",
+    "shanghai": "上海",
+    "beijing": "北京"
+  },
+  "东京": {
+    "condition": "小雨",
+    "temperature": 23,
+    "advice": "建议带伞，路面可能湿滑。"
+  },
+  "大阪": {
+    "condition": "多云",
+    "temperature": 27,
+    "advice": "适合出行，午后注意补水。"
+  },
+  "上海": {
+    "condition": "晴",
+    "temperature": 31,
+    "advice": "紫外线较强，建议防晒。"
+  },
+  "北京": {
+    "condition": "阴",
+    "temperature": 26,
+    "advice": "空气湿度偏高，适合轻便衣物。"
+  },
+  "合肥": {
+    "condition": "多云",
+    "temperature": 29,
+    "advice": "天气较舒适，外出可带一瓶水。"
+  }
+}

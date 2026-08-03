@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniAgent Runtime</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #18202b;
+      --muted: #657184;
+      --line: #dce1e8;
+      --accent: #2563eb;
+      --accent-weak: #e8f0ff;
+      --ok: #087f5b;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 360px;
+    }
+    aside, main, section { min-height: 0; }
+    aside {
+      border-right: 1px solid var(--line);
+      background: #fbfcfe;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .brand { font-weight: 700; font-size: 18px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    input, textarea, button {
+      font: inherit;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: white;
+      color: var(--ink);
+    }
+    button {
+      padding: 9px 12px;
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.secondary {
+      background: white;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    #sessions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: auto;
+    }
+    .session {
+      padding: 10px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .session.active { border-color: var(--accent); background: var(--accent-weak); }
+    .session .title { font-weight: 700; overflow-wrap: anywhere; }
+    .session .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    main {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: var(--panel);
+    }
+    header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    #messages {
+      overflow: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 78%;
+      padding: 11px 13px;
+      border-radius: 8px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .user { align-self: flex-end; background: var(--accent); color: white; }
+    .assistant { align-self: flex-start; background: #eef2f7; }
+    .tool { align-self: flex-start; background: #f7f5ea; color: #4f4630; font-size: 13px; }
+    form {
+      border-top: 1px solid var(--line);
+      padding: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+    textarea { resize: none; height: 54px; }
+    section.trace {
+      border-left: 1px solid var(--line);
+      background: #fbfcfe;
+      padding: 16px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+    }
+    #trace {
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .event {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .event strong { display: block; margin-bottom: 6px; }
+    pre {
+      margin: 0;
+      color: var(--muted);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    @media (max-width: 980px) {
+      body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 280px; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 220px; }
+      section.trace { border-left: 0; border-top: 1px solid var(--line); }
+      .msg { max-width: 92%; }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="brand">MiniAgent Runtime</div>
+    <input id="userId" value="user_a" aria-label="user id">
+    <button id="newSession">新建会话</button>
+    <div id="sessions"></div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <strong id="sessionTitle">未选择会话</strong>
+        <div id="sessionMeta" style="color: var(--muted); font-size: 13px;"></div>
+      </div>
+      <button class="secondary" id="refresh">刷新</button>
+    </header>
+    <div id="messages"></div>
+    <form id="chatForm">
+      <textarea id="input" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+      <button id="send">发送</button>
+    </form>
+  </main>
+
+  <section class="trace">
+    <div>
+      <strong>Trace</strong>
+      <div style="color: var(--muted); font-size: 13px;">当前轮次的执行事件</div>
+    </div>
+    <div id="trace"></div>
+  </section>
+
+  <script>
+    let activeSession = null;
+    let busy = false;
+
+    const $ = (id) => document.getElementById(id);
+    const api = async (url, options = {}) => {
+      const res = await fetch(url, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "request failed");
+      return data;
+    };
+
+    async function loadSessions() {
+      const userId = $("userId").value.trim();
+      if (!userId) return;
+      const data = await api(`/api/sessions?user_id=${encodeURIComponent(userId)}`);
+      $("sessions").innerHTML = "";
+      data.sessions.forEach((session) => {
+        const node = document.createElement("div");
+        node.className = "session" + (activeSession === session.id ? " active" : "");
+        node.innerHTML = `<div class="title">${escapeHtml(session.title)}</div><div class="meta">${session.id}</div>`;
+        node.onclick = () => selectSession(session.id, session.title);
+        $("sessions").appendChild(node);
+      });
+    }
+
+    async function selectSession(id, title) {
+      activeSession = id;
+      $("sessionTitle").textContent = title || id;
+      $("sessionMeta").textContent = id;
+      await Promise.all([loadSessions(), loadMessages()]);
+      $("trace").innerHTML = "";
+    }
+
+    async function loadMessages() {
+      if (!activeSession) return;
+      const userId = $("userId").value.trim();
+      const data = await api(`/api/sessions/${activeSession}/messages?user_id=${encodeURIComponent(userId)}`);
+      $("messages").innerHTML = "";
+      data.messages.forEach(addMessage);
+      $("messages").scrollTop = $("messages").scrollHeight;
+    }
+
+    function addMessage(message) {
+      const node = document.createElement("div");
+      node.className = `msg ${message.role}`;
+      if (message.role === "tool") {
+        node.textContent = `[${message.tool_name}] ${message.content}`;
+      } else if (message.message_type === "tool_call") {
+        node.className = "msg tool";
+        node.textContent = `[tool_call] ${message.content}`;
+      } else {
+        node.textContent = message.content;
+      }
+      $("messages").appendChild(node);
+    }
+
+    async function loadTrace(turnId) {
+      const data = await api(`/api/turns/${turnId}/trace`);
+      $("trace").innerHTML = "";
+      data.events.forEach((event) => {
+        const node = document.createElement("div");
+        node.className = "event";
+        node.innerHTML = `<strong>${event.event_type}</strong><pre>${escapeHtml(JSON.stringify(event.payload, null, 2))}</pre>`;
+        $("trace").appendChild(node);
+      });
+    }
+
+    $("newSession").onclick = async () => {
+      const userId = $("userId").value.trim();
+      const data = await api("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId, title: "Agent 会话" })
+      });
+      await selectSession(data.session.id, data.session.title);
+    };
+
+    $("refresh").onclick = () => Promise.all([loadSessions(), loadMessages()]);
+    $("userId").onchange = async () => {
+      activeSession = null;
+      $("sessionTitle").textContent = "未选择会话";
+      $("sessionMeta").textContent = "";
+      $("messages").innerHTML = "";
+      $("trace").innerHTML = "";
+      await loadSessions();
+    };
+
+    $("chatForm").onsubmit = async (event) => {
+      event.preventDefault();
+      if (!activeSession || busy) return;
+      const content = $("input").value.trim();
+      if (!content) return;
+      busy = true;
+      $("send").disabled = true;
+      $("input").value = "";
+      addMessage({ role: "user", content });
+      try {
+        const data = await api(`/api/sessions/${activeSession}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ user_id: $("userId").value.trim(), content })
+        });
+        await loadMessages();
+        await loadTrace(data.turn_id);
+      } catch (err) {
+        addMessage({ role: "assistant", content: `请求失败：${err.message}` });
+      } finally {
+        busy = false;
+        $("send").disabled = false;
+      }
+    };
+
+    $("input").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        $("chatForm").requestSubmit();
+      }
+    });
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    loadSessions();
+  </script>
+</body>
+</html>

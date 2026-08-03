@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Agent Runtime Design Notes",
+    "snippet": "A minimal agent runtime should separate the loop, tool registry, context builder, and persistence so each part can be tested independently.",
+    "source": "mock://agent-runtime/design",
+    "tags": ["agent", "runtime", "context", "tools"]
+  },
+  {
+    "title": "Context Compression Playbook",
+    "snippet": "Use a structured summary plus a recent-message window. Keep raw history in storage, but do not inject all old turns into the model prompt.",
+    "source": "mock://context/compression",
+    "tags": ["context", "summary", "memory"]
+  },
+  {
+    "title": "Tool Safety Checklist",
+    "snippet": "Tools need schemas, argument validation, timeouts, error wrapping, trace events, and allow-list lookup from the registry.",
+    "source": "mock://tools/safety",
+    "tags": ["tools", "schema", "trace"]
+  },
+  {
+    "title": "Session Isolation",
+    "snippet": "Chat history and summaries are scoped by user_id and session_id. Business data can be user scoped when the product semantics require it.",
+    "source": "mock://session/isolation",
+    "tags": ["session", "sqlite", "todo"]
+  }
+]

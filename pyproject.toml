@@ -1,0 +1,10 @@
+[project]
+name = "miniagent-runtime"
+version = "0.1.0"
+description = "A minimal from-scratch agent runtime with tools, sessions, context compression, and trace logs."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
