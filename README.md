@@ -212,8 +212,3 @@ Memory 召回时机：
 
 
 
-## 提交物状态
-
-- 代码：[LoRinBrOwn/miniRuntime_Agent](https://github.com/LoRinBrOwn/miniRuntime_Agent.git)
-- 架构设计题：单独提交，不放入代码仓库。
-- AI Prompt 与问题解决记录：单独提交，不放入代码仓库。
