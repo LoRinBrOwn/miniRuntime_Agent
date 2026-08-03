@@ -151,6 +151,56 @@ class RuntimeTestCase(unittest.TestCase):
         messages, _ = context.build(session["id"])
         self.assertTrue(any("普通聊天 34" in str(message.get("content", "")) for message in messages))
 
+    def test_context_sanitizes_orphan_tool_result(self) -> None:
+        session = self.repo.create_session("user_a", "orphan tool")
+        self.repo.save_message(session["id"], "turn_1", "user", "查上海天气")
+        self.repo.save_message(
+            session["id"],
+            "turn_1",
+            "tool",
+            '{"success": true}',
+            message_type="tool_result",
+            tool_name="weather",
+            tool_call_id="missing_call",
+        )
+        context = ContextManager(self.repo)
+        messages, _ = context.build(session["id"])
+        self.assertFalse(any(message.get("role") == "tool" for message in messages))
+        self.assertTrue(any("Historical tool result" in str(message.get("content", "")) for message in messages))
+
+    def test_context_sanitizes_incomplete_parallel_tool_call(self) -> None:
+        session = self.repo.create_session("user_a", "incomplete tools")
+        self.repo.save_message(session["id"], "turn_1", "user", "查上海天气并建待办")
+        self.repo.save_message(
+            session["id"],
+            "turn_1",
+            "assistant",
+            json.dumps(
+                {
+                    "decision_summary": "need tools",
+                    "tool_calls": [
+                        {"id": "call_weather", "name": "weather", "arguments": {"city": "上海"}},
+                        {"id": "call_todo", "name": "todo", "arguments": {"action": "create", "title": "去上海"}},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            message_type="tool_call",
+        )
+        self.repo.save_message(
+            session["id"],
+            "turn_1",
+            "tool",
+            '{"success": true}',
+            message_type="tool_result",
+            tool_name="weather",
+            tool_call_id="call_weather",
+        )
+        context = ContextManager(self.repo)
+        messages, _ = context.build(session["id"])
+        self.assertFalse(any(message.get("tool_calls") for message in messages))
+        self.assertFalse(any(message.get("role") == "tool" for message in messages))
+
     def test_unknown_tool_is_observed_not_crashed(self) -> None:
         session = self.repo.create_session("user_a", "unknown")
         runtime = self.runtime(

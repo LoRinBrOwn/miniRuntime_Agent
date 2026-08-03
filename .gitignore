@@ -10,6 +10,8 @@ agent_smoke.db
 *.sqlite
 *.log
 .env
+*.docx
+*.zip
 ~$*.docx
 .coverage
 htmlcov/

@@ -70,6 +70,7 @@ class ContextManager:
                 else:
                     messages.append({"role": role, "content": message["content"]})
         messages = self._trim(messages)
+        messages = self._sanitize_tool_sequence(messages)
         metadata = {
             "message_count": len(messages),
             "estimated_chars": sum(len(str(item.get("content", ""))) for item in messages),
@@ -114,6 +115,67 @@ class ContextManager:
             kept.append(message)
             running += size
         return [system, *reversed(kept)]
+
+    def _sanitize_tool_sequence(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not messages:
+            return messages
+        sanitized: list[dict[str, Any]] = [messages[0]]
+        pending_tool_ids: set[str] = set()
+        index = 1
+        while index < len(messages):
+            message = messages[index]
+            if message.get("role") == "assistant":
+                tool_calls = message.get("tool_calls") or []
+                required_tool_ids = {
+                    call.get("id")
+                    for call in tool_calls
+                    if isinstance(call, dict) and isinstance(call.get("id"), str)
+                }
+                if required_tool_ids and not self._has_contiguous_tool_results(messages, index + 1, required_tool_ids):
+                    sanitized.append(
+                        {
+                            "role": "assistant",
+                            "content": f"Historical tool call summary: {json.dumps(tool_calls, ensure_ascii=False)}",
+                        }
+                    )
+                    pending_tool_ids = set()
+                    index += 1
+                    continue
+                pending_tool_ids = required_tool_ids
+                sanitized.append(message)
+                index += 1
+                continue
+
+            if message.get("role") == "tool":
+                tool_call_id = message.get("tool_call_id")
+                if tool_call_id in pending_tool_ids:
+                    sanitized.append(message)
+                    pending_tool_ids.discard(tool_call_id)
+                else:
+                    sanitized.append(
+                        {
+                            "role": "assistant",
+                            "content": f"Historical tool result ({message.get('name') or 'unknown'}): {message.get('content', '')}",
+                        }
+                    )
+                    pending_tool_ids = set()
+                index += 1
+                continue
+
+            pending_tool_ids = set()
+            sanitized.append(message)
+            index += 1
+        return sanitized
+
+    def _has_contiguous_tool_results(self, messages: list[dict[str, Any]], start: int, required_tool_ids: set[str]) -> bool:
+        seen: set[str] = set()
+        index = start
+        while index < len(messages) and messages[index].get("role") == "tool":
+            tool_call_id = messages[index].get("tool_call_id")
+            if isinstance(tool_call_id, str):
+                seen.add(tool_call_id)
+            index += 1
+        return required_tool_ids.issubset(seen)
 
     def _assistant_tool_call_message(self, content: str) -> dict[str, Any] | None:
         try:
