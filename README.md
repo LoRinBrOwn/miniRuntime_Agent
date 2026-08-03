@@ -41,6 +41,8 @@ python -m miniagent.server
 http://127.0.0.1:8000
 ```
 
+Web 页面包含会话列表、聊天区、Todo 工具面板和 Trace 面板。你可以通过聊天让 Agent 创建待办，也可以在右侧 Todo 面板里手动添加或点击完成。
+
 健康检查：
 
 ```powershell
@@ -209,6 +211,5 @@ Memory 召回时机：
 - 最大步数：返回 `max_steps_exceeded`。
 - 连续 3 次相同工具调用：返回 `repeated_tool_call`。
 - 同一 session 并发：进程内 lock，返回 `SESSION_BUSY`。
-
 
 

@@ -24,7 +24,7 @@
       background: var(--bg);
       height: 100vh;
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr) 360px;
+      grid-template-columns: 280px minmax(0, 1fr) 380px;
     }
     aside, main, section { min-height: 0; }
     aside {
@@ -109,7 +109,7 @@
     .user { align-self: flex-end; background: var(--accent); color: white; }
     .assistant { align-self: flex-start; background: #eef2f7; }
     .tool { align-self: flex-start; background: #f7f5ea; color: #4f4630; font-size: 13px; }
-    form {
+    #chatForm {
       border-top: 1px solid var(--line);
       padding: 14px;
       display: grid;
@@ -117,15 +117,22 @@
       gap: 10px;
     }
     textarea { resize: none; height: 54px; }
-    section.trace {
+    section.side {
       border-left: 1px solid var(--line);
       background: #fbfcfe;
       padding: 16px;
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 12px;
+      grid-template-rows: minmax(220px, 38%) minmax(0, 1fr);
+      gap: 16px;
+      min-height: 0;
     }
-    #trace {
+    .panel {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+    #trace, #todos {
       overflow: auto;
       display: flex;
       flex-direction: column;
@@ -147,10 +154,60 @@
       font-family: Consolas, monospace;
       font-size: 12px;
     }
+    #todoForm {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    #todoForm input { min-width: 0; }
+    .todo-item {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .todo-item button {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: 50%;
+      background: white;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .todo-item.completed {
+      opacity: .62;
+    }
+    .todo-item.completed .todo-title {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+    .todo-title {
+      overflow-wrap: anywhere;
+      line-height: 1.4;
+    }
+    .todo-meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .empty {
+      color: var(--muted);
+      background: white;
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 13px;
+    }
     @media (max-width: 980px) {
-      body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 280px; }
+      body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 420px; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 220px; }
-      section.trace { border-left: 0; border-top: 1px solid var(--line); }
+      section.side { border-left: 0; border-top: 1px solid var(--line); grid-template-rows: 1fr 1fr; }
       .msg { max-width: 92%; }
     }
   </style>
@@ -178,12 +235,25 @@
     </form>
   </main>
 
-  <section class="trace">
-    <div>
-      <strong>Trace</strong>
-      <div style="color: var(--muted); font-size: 13px;">当前轮次的执行事件</div>
+  <section class="side">
+    <div class="panel">
+      <div>
+        <strong>Todo</strong>
+        <div style="color: var(--muted); font-size: 13px;">当前用户的待办工具</div>
+        <form id="todoForm">
+          <input id="todoTitle" placeholder="新增待办">
+          <button id="addTodo">添加</button>
+        </form>
+      </div>
+      <div id="todos"></div>
     </div>
-    <div id="trace"></div>
+    <div class="panel">
+      <div>
+        <strong>Trace</strong>
+        <div style="color: var(--muted); font-size: 13px;">当前轮次的执行事件</div>
+      </div>
+      <div id="trace"></div>
+    </div>
   </section>
 
   <script>
@@ -236,6 +306,45 @@
       $("messages").scrollTop = $("messages").scrollHeight;
     }
 
+    async function loadTodos() {
+      const userId = $("userId").value.trim();
+      if (!userId) return;
+      const data = await api(`/api/todos?user_id=${encodeURIComponent(userId)}`);
+      $("todos").innerHTML = "";
+      if (data.todos.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "暂无待办";
+        $("todos").appendChild(empty);
+        return;
+      }
+      data.todos.forEach((todo) => {
+        const node = document.createElement("div");
+        node.className = "todo-item" + (todo.status === "completed" ? " completed" : "");
+        const disabled = todo.status === "completed" ? "disabled" : "";
+        node.innerHTML = `
+          <button title="完成待办" ${disabled}>✓</button>
+          <div>
+            <div class="todo-title">${escapeHtml(todo.title)}</div>
+            <div class="todo-meta">${escapeHtml(todo.status)} · ${escapeHtml(todo.source_session_id)}</div>
+          </div>
+        `;
+        const button = node.querySelector("button");
+        button.onclick = async () => {
+          await completeTodo(todo.id);
+        };
+        $("todos").appendChild(node);
+      });
+    }
+
+    async function completeTodo(todoId) {
+      await api(`/api/todos/${encodeURIComponent(todoId)}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: $("userId").value.trim() })
+      });
+      await loadTodos();
+    }
+
     function addMessage(message) {
       const node = document.createElement("div");
       node.className = `msg ${message.role}`;
@@ -275,14 +384,37 @@
       await createSession();
     };
 
-    $("refresh").onclick = () => Promise.all([loadSessions(), loadMessages()]);
+    $("refresh").onclick = () => Promise.all([loadSessions(), loadMessages(), loadTodos()]);
     $("userId").onchange = async () => {
       activeSession = null;
       $("sessionTitle").textContent = "未选择会话";
       $("sessionMeta").textContent = "";
       $("messages").innerHTML = "";
       $("trace").innerHTML = "";
-      await loadSessions();
+      await Promise.all([loadSessions(), loadTodos()]);
+    };
+
+    $("todoForm").onsubmit = async (event) => {
+      event.preventDefault();
+      const title = $("todoTitle").value.trim();
+      if (!title) return;
+      $("addTodo").disabled = true;
+      try {
+        await api("/api/todos", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: $("userId").value.trim(),
+            session_id: activeSession,
+            title
+          })
+        });
+        $("todoTitle").value = "";
+        await loadTodos();
+      } catch (err) {
+        addMessage({ role: "assistant", content: `待办创建失败：${err.message}` });
+      } finally {
+        $("addTodo").disabled = false;
+      }
     };
 
     $("chatForm").onsubmit = async (event) => {
@@ -305,6 +437,7 @@
         });
         await loadMessages();
         await loadTrace(data.turn_id);
+        await loadTodos();
       } catch (err) {
         addMessage({ role: "assistant", content: `请求失败：${err.message}` });
       } finally {
@@ -327,7 +460,7 @@
       }[ch]));
     }
 
-    loadSessions();
+    Promise.all([loadSessions(), loadTodos()]);
   </script>
 </body>
 </html>

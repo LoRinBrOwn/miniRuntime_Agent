@@ -28,6 +28,13 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             if not user_id:
                 return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id required"})
             return self._json(200, {"sessions": self.runtime.repo.list_sessions(user_id)})
+        if parsed.path == "/api/todos":
+            query = parse_qs(parsed.query)
+            user_id = query.get("user_id", [""])[0]
+            status = query.get("status", [None])[0]
+            if not user_id:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id required"})
+            return self._json(200, {"todos": self.runtime.repo.list_todos(user_id, status)})
         if parsed.path.startswith("/api/turns/") and parsed.path.endswith("/trace"):
             turn_id = parsed.path.split("/")[3]
             return self._json(200, {"events": self.runtime.repo.get_trace(turn_id)})
@@ -57,6 +64,26 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             except SessionBusyError:
                 return self._json(409, {"error": "SESSION_BUSY"})
             return self._json(200, response.__dict__)
+        if parsed.path == "/api/todos":
+            user_id = body.get("user_id")
+            title = body.get("title")
+            session_id = body.get("session_id") or "manual"
+            if not user_id or not title:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and title required"})
+            if session_id != "manual" and not self.runtime.repo.get_session(user_id, session_id):
+                return self._json(403, {"error": "SESSION_FORBIDDEN"})
+            todo = self.runtime.repo.create_todo(user_id, session_id, title)
+            return self._json(200, {"todo": todo})
+        if parsed.path.startswith("/api/todos/") and parsed.path.endswith("/complete"):
+            parts = parsed.path.strip("/").split("/")
+            todo_id = parts[2] if len(parts) >= 3 else ""
+            user_id = body.get("user_id")
+            if not user_id or not todo_id:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and todo_id required"})
+            todo = self.runtime.repo.complete_todo(user_id, todo_id)
+            if not todo:
+                return self._json(404, {"error": "TODO_NOT_FOUND"})
+            return self._json(200, {"todo": todo})
         return self._json(404, {"error": "NOT_FOUND"})
 
     def _read_json(self) -> dict:
