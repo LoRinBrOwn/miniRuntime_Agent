@@ -17,14 +17,21 @@
       --bad: #b42318;
     }
     * { box-sizing: border-box; }
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       margin: 0;
       font-family: Arial, "Microsoft YaHei", sans-serif;
       color: var(--ink);
       background: var(--bg);
       height: 100vh;
+      height: 100dvh;
       display: grid;
       grid-template-columns: 280px minmax(0, 1fr) 360px;
+      grid-template-rows: minmax(0, 1fr);
+      overflow: hidden;
     }
     aside, main, section { min-height: 0; }
     aside {
@@ -168,6 +175,13 @@
     }
     .chat-tools input { min-width: 0; }
     textarea { resize: none; height: 54px; }
+    main.no-session {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    main.no-session .chat-tools,
+    main.no-session #chatForm {
+      display: none;
+    }
     section.side {
       border-left: 1px solid var(--line);
       background: #fbfcfe;
@@ -412,6 +426,7 @@
 
     async function selectSession(id, title) {
       activeSession = id;
+      document.querySelector("main").classList.remove("no-session");
       $("sessionTitle").textContent = title || id;
       $("sessionMeta").textContent = id;
       await Promise.all([loadSessions(), loadMessages()]);
@@ -451,6 +466,7 @@
     }
 
     function renderEmptyState(type) {
+      document.querySelector("main").classList.toggle("no-session", type === "no-session");
       const empty = type === "empty-session"
         ? {
             title: "这个会话还没有消息",
@@ -490,6 +506,7 @@
         $("messages").classList.remove("empty-view");
         $("messages").innerHTML = "";
       }
+      document.querySelector("main").classList.remove("no-session");
       const node = document.createElement("div");
       node.className = `msg ${message.role}`;
       if (message.message_type === "tool_call") {
