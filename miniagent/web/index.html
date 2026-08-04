@@ -131,6 +131,21 @@
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
     }
+    .chat-tools {
+      border-top: 1px solid var(--line);
+      padding: 10px 14px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      background: #fbfcfe;
+    }
+    .chat-tools span {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .chat-tools input { min-width: 0; }
     textarea { resize: none; height: 54px; }
     section.side {
       border-left: 1px solid var(--line);
@@ -226,6 +241,8 @@
       body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) 420px; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 220px; }
       section.side { border-left: 0; border-top: 1px solid var(--line); }
+      .chat-tools { grid-template-columns: 1fr auto auto; }
+      .chat-tools span { display: none; }
       .msg { max-width: 92%; }
     }
   </style>
@@ -247,6 +264,12 @@
       <button class="secondary" id="refresh">刷新</button>
     </header>
     <div id="messages"></div>
+    <form id="todoToolForm" class="chat-tools">
+      <span>Todo</span>
+      <input id="inlineTodoTitle" placeholder="当前会话新增待办">
+      <button id="inlineAddTodo">添加</button>
+      <button id="inlineListTodo" type="button" class="secondary">查看</button>
+    </form>
     <form id="chatForm">
       <textarea id="input" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
       <button id="send">发送</button>
@@ -447,6 +470,13 @@
       return data.session;
     }
 
+    async function ensureSession() {
+      if (!activeSession) {
+        await createSession();
+      }
+      return activeSession;
+    }
+
     $("newSession").onclick = async () => {
       await createSession();
     };
@@ -461,6 +491,49 @@
       await loadSessions();
     };
 
+    $("todoToolForm").onsubmit = async (event) => {
+      event.preventDefault();
+      const title = $("inlineTodoTitle").value.trim();
+      if (!title) return;
+      $("inlineAddTodo").disabled = true;
+      try {
+        await ensureSession();
+        await api("/api/todos", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: $("userId").value.trim(),
+            session_id: activeSession,
+            title
+          })
+        });
+        $("inlineTodoTitle").value = "";
+        await loadMessages();
+      } catch (err) {
+        addMessage({ role: "assistant", content: `待办创建失败：${err.message}` });
+      } finally {
+        $("inlineAddTodo").disabled = false;
+      }
+    };
+
+    $("inlineListTodo").onclick = async () => {
+      $("inlineListTodo").disabled = true;
+      try {
+        await ensureSession();
+        await api("/api/todos/list", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: $("userId").value.trim(),
+            session_id: activeSession
+          })
+        });
+        await loadMessages();
+      } catch (err) {
+        addMessage({ role: "assistant", content: `待办查询失败：${err.message}` });
+      } finally {
+        $("inlineListTodo").disabled = false;
+      }
+    };
+
     $("chatForm").onsubmit = async (event) => {
       event.preventDefault();
       if (busy) return;
@@ -471,9 +544,7 @@
       $("send").textContent = "发送中";
       $("input").value = "";
       try {
-        if (!activeSession) {
-          await createSession();
-        }
+        await ensureSession();
         addMessage({ role: "user", content });
         const data = await api(`/api/sessions/${activeSession}/messages`, {
           method: "POST",
