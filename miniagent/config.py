@@ -14,8 +14,8 @@ class Settings:
     max_agent_steps: int = 8
     tool_timeout_seconds: float = 10.0
     llm_timeout_seconds: float = 60.0
-    recent_message_limit: int = 20
-    summary_trigger_messages: int = 30
+    recent_message_limit: int = 10
+    summary_trigger_messages: int = 20
     context_max_chars: int = 24000
     timezone: str = "Asia/Shanghai"
     host: str = "127.0.0.1"
@@ -32,8 +32,8 @@ def load_settings() -> Settings:
         max_agent_steps=int(os.getenv("MAX_AGENT_STEPS", "8")),
         tool_timeout_seconds=float(os.getenv("TOOL_TIMEOUT_SECONDS", "10")),
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
-        recent_message_limit=int(os.getenv("RECENT_MESSAGE_LIMIT", "20")),
-        summary_trigger_messages=int(os.getenv("SUMMARY_TRIGGER_MESSAGES", "30")),
+        recent_message_limit=int(os.getenv("RECENT_MESSAGE_LIMIT", "10")),
+        summary_trigger_messages=int(os.getenv("SUMMARY_TRIGGER_MESSAGES", "20")),
         context_max_chars=int(os.getenv("CONTEXT_MAX_CHARS", "24000")),
         timezone=os.getenv("TIMEZONE", "Asia/Shanghai"),
         host=os.getenv("HOST", "127.0.0.1"),

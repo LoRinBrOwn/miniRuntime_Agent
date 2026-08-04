@@ -163,13 +163,13 @@ Todo 按 `user_id + source_session_id` 隔离。每个会话只显示和操作�
 Memory 召回时机：
 
 - 每次 LLM 调用都会注入当前 session 的结构化摘要。
-- 每次 LLM 调用都会注入最近 N 条原文消息，默认 `RECENT_MESSAGE_LIMIT=20`。
+- 每次 LLM 调用都会注入最近 N 条原文消息，默认 `RECENT_MESSAGE_LIMIT=10`。
 - 工具结果作为 `tool` role 消息进入近期窗口，支持“那武汉呢？”、“再除以 4”这类追问。
 - Todo 不直接塞进 system prompt，只有模型在当前会话主动调用 `todo` 的 `list` action 时，才以工具结果卡片形式召回当前会话的待办。
 
 压缩触发：
 
-- 消息数超过 `SUMMARY_TRIGGER_MESSAGES`，默认 30。
+- 消息数超过 `SUMMARY_TRIGGER_MESSAGES`，默认 20。
 - 旧消息被提炼进 `summary_json`，最近窗口保留原文。
 - 原始消息不删除，后续仍可审计和重新压缩。
 
