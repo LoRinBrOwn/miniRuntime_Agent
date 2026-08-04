@@ -113,6 +113,27 @@
       flex-direction: column;
       gap: 12px;
     }
+    #messages.empty-view {
+      justify-content: center;
+      align-items: center;
+    }
+    .empty-state {
+      width: min(420px, 100%);
+      text-align: center;
+      color: var(--muted);
+      padding: 28px 18px;
+    }
+    .empty-state strong {
+      display: block;
+      color: var(--ink);
+      font-size: 17px;
+      margin-bottom: 8px;
+    }
+    .empty-state p {
+      margin: 0;
+      line-height: 1.6;
+      font-size: 14px;
+    }
     .msg {
       max-width: 78%;
       padding: 11px 13px;
@@ -384,6 +405,8 @@
       if (!activeSession && data.sessions.length > 0) {
         const session = data.sessions[0];
         await selectSession(session.id, session.title);
+      } else if (!activeSession) {
+        renderEmptyState("no-session");
       }
     }
 
@@ -404,19 +427,46 @@
         activeSession = null;
         $("sessionTitle").textContent = "未选择会话";
         $("sessionMeta").textContent = "";
-        $("messages").innerHTML = "";
+        renderEmptyState("no-session");
         $("trace").innerHTML = "";
       }
       await loadSessions();
     }
 
     async function loadMessages() {
-      if (!activeSession) return;
+      if (!activeSession) {
+        renderEmptyState("no-session");
+        return;
+      }
       const userId = $("userId").value.trim();
       const data = await api(`/api/sessions/${activeSession}/messages?user_id=${encodeURIComponent(userId)}`);
       $("messages").innerHTML = "";
       data.messages.forEach(addMessage);
+      if (data.messages.length === 0) {
+        renderEmptyState("empty-session");
+      } else {
+        $("messages").classList.remove("empty-view");
+      }
       $("messages").scrollTop = $("messages").scrollHeight;
+    }
+
+    function renderEmptyState(type) {
+      const empty = type === "empty-session"
+        ? {
+            title: "这个会话还没有消息",
+            body: "可以开始聊天，或者先添加一条当前会话待办。"
+          }
+        : {
+            title: "还没有选择会话",
+            body: "新建会话后，消息、Todo 和 Trace 会在这里出现。"
+          };
+      $("messages").classList.add("empty-view");
+      $("messages").innerHTML = `
+        <div class="empty-state">
+          <strong>${empty.title}</strong>
+          <p>${empty.body}</p>
+        </div>
+      `;
     }
 
     async function completeTodo(todoId) {
@@ -436,6 +486,10 @@
     }
 
     function addMessage(message) {
+      if ($("messages").classList.contains("empty-view")) {
+        $("messages").classList.remove("empty-view");
+        $("messages").innerHTML = "";
+      }
       const node = document.createElement("div");
       node.className = `msg ${message.role}`;
       if (message.message_type === "tool_call") {
@@ -703,7 +757,7 @@
       activeSession = null;
       $("sessionTitle").textContent = "未选择会话";
       $("sessionMeta").textContent = "";
-      $("messages").innerHTML = "";
+      renderEmptyState("no-session");
       $("trace").innerHTML = "";
       await loadSessions();
     };
