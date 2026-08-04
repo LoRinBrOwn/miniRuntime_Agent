@@ -74,10 +74,25 @@
       border: 1px solid var(--line);
       border-radius: 6px;
       cursor: pointer;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
     }
     .session.active { border-color: var(--accent); background: var(--accent-weak); }
     .session .title { font-weight: 700; overflow-wrap: anywhere; }
     .session .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .session-delete {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: 6px;
+      background: white;
+      color: var(--bad);
+      border-color: var(--line);
+      font-size: 16px;
+      line-height: 1;
+    }
     main {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
@@ -167,18 +182,24 @@
       border-radius: 6px;
       padding: 10px;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: start;
     }
-    .todo-item button {
-      width: 28px;
-      height: 28px;
-      padding: 0;
-      border-radius: 50%;
+    .todo-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .todo-actions button {
+      padding: 5px 8px;
+      border-radius: 6px;
       background: white;
       color: var(--accent);
       font-weight: 700;
+      font-size: 12px;
+    }
+    .todo-actions .undo {
+      color: var(--ok);
     }
     .todo-item.completed {
       opacity: .62;
@@ -279,8 +300,19 @@
       data.sessions.forEach((session) => {
         const node = document.createElement("div");
         node.className = "session" + (activeSession === session.id ? " active" : "");
-        node.innerHTML = `<div class="title">${escapeHtml(session.title)}</div><div class="meta">${session.id}</div>`;
+        node.innerHTML = `
+          <div>
+            <div class="title">${escapeHtml(session.title)}</div>
+            <div class="meta">${session.id}</div>
+          </div>
+          <button class="session-delete" title="删除会话">×</button>
+        `;
         node.onclick = () => selectSession(session.id, session.title);
+        const deleteButton = node.querySelector(".session-delete");
+        deleteButton.onclick = async (event) => {
+          event.stopPropagation();
+          await deleteSession(session.id);
+        };
         $("sessions").appendChild(node);
       });
       if (!activeSession && data.sessions.length > 0) {
@@ -295,6 +327,21 @@
       $("sessionMeta").textContent = id;
       await Promise.all([loadSessions(), loadMessages()]);
       $("trace").innerHTML = "";
+    }
+
+    async function deleteSession(sessionId) {
+      if (!confirm("删除这个会话？消息和 Trace 会一起删除，待办会保留。")) return;
+      await api(`/api/sessions/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent($("userId").value.trim())}`, {
+        method: "DELETE"
+      });
+      if (activeSession === sessionId) {
+        activeSession = null;
+        $("sessionTitle").textContent = "未选择会话";
+        $("sessionMeta").textContent = "";
+        $("messages").innerHTML = "";
+        $("trace").innerHTML = "";
+      }
+      await loadSessions();
     }
 
     async function loadMessages() {
@@ -321,17 +368,23 @@
       data.todos.forEach((todo) => {
         const node = document.createElement("div");
         node.className = "todo-item" + (todo.status === "completed" ? " completed" : "");
-        const disabled = todo.status === "completed" ? "disabled" : "";
+        const actionButton = todo.status === "completed"
+          ? `<button class="undo" title="撤回完成状态">撤回</button>`
+          : `<button title="完成待办">完成</button>`;
         node.innerHTML = `
-          <button title="完成待办" ${disabled}>✓</button>
           <div>
             <div class="todo-title">${escapeHtml(todo.title)}</div>
             <div class="todo-meta">${escapeHtml(todo.status)} · ${escapeHtml(todo.source_session_id)}</div>
           </div>
+          <div class="todo-actions">${actionButton}</div>
         `;
         const button = node.querySelector("button");
         button.onclick = async () => {
-          await completeTodo(todo.id);
+          if (todo.status === "completed") {
+            await reopenTodo(todo.id);
+          } else {
+            await completeTodo(todo.id);
+          }
         };
         $("todos").appendChild(node);
       });
@@ -339,6 +392,14 @@
 
     async function completeTodo(todoId) {
       await api(`/api/todos/${encodeURIComponent(todoId)}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: $("userId").value.trim() })
+      });
+      await loadTodos();
+    }
+
+    async function reopenTodo(todoId) {
+      await api(`/api/todos/${encodeURIComponent(todoId)}/reopen`, {
         method: "POST",
         body: JSON.stringify({ user_id: $("userId").value.trim() })
       });

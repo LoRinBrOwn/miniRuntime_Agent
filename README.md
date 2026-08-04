@@ -152,7 +152,7 @@ flowchart LR
 
 工具失败不会导致进程崩溃；失败结果作为 tool observation 返回给模型，由模型修正参数或解释限制。
 
-## Session 与 Memory
+## Session 与 Memory召回
 
 Session 隔离指对话历史、摘要和当前上下文按 `user_id + session_id` 隔离。用户 A 的窗口 1 与窗口 2 可以随时继续，但构建 context 时只读取当前 session 的消息和摘要。
 
@@ -211,5 +211,4 @@ Memory 召回时机：
 - 最大步数：返回 `max_steps_exceeded`。
 - 连续 3 次相同工具调用：返回 `repeated_tool_call`。
 - 同一 session 并发：进程内 lock，返回 `SESSION_BUSY`。
-
 

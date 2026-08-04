@@ -145,6 +145,19 @@ class SQLiteRepository:
         with self.connect() as conn:
             conn.execute(f"UPDATE sessions SET {assignments} WHERE id=:id", fields)
 
+    def delete_session(self, user_id: str, session_id: str) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id=? AND user_id=?",
+                (session_id, user_id),
+            ).fetchone()
+            if not row:
+                return False
+            conn.execute("DELETE FROM trace_events WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM sessions WHERE id=? AND user_id=?", (session_id, user_id))
+        return True
+
     def save_message(
         self,
         session_id: str,
@@ -243,12 +256,20 @@ class SQLiteRepository:
         return [dict(row) for row in rows]
 
     def complete_todo(self, user_id: str, todo_id: str) -> dict[str, Any] | None:
+        return self.set_todo_status(user_id, todo_id, "completed")
+
+    def reopen_todo(self, user_id: str, todo_id: str) -> dict[str, Any] | None:
+        return self.set_todo_status(user_id, todo_id, "pending")
+
+    def set_todo_status(self, user_id: str, todo_id: str, status: str) -> dict[str, Any] | None:
+        if status not in {"pending", "completed"}:
+            raise ValueError("todo status must be pending or completed")
         now = utc_now()
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM todos WHERE id=? AND user_id=?", (todo_id, user_id)).fetchone()
             if not row:
                 return None
-            conn.execute("UPDATE todos SET status='completed', updated_at=? WHERE id=?", (now, todo_id))
+            conn.execute("UPDATE todos SET status=?, updated_at=? WHERE id=?", (status, now, todo_id))
             updated = conn.execute("SELECT * FROM todos WHERE id=?", (todo_id,)).fetchone()
         return dict(updated) if updated else None
 

@@ -214,6 +214,28 @@ class RuntimeTestCase(unittest.TestCase):
         tool_message = [m for m in self.repo.get_messages(session["id"]) if m["role"] == "tool"][0]
         self.assertIn("unknown tool", tool_message["content"])
 
+    def test_todo_can_be_reopened_after_completion(self) -> None:
+        session = self.repo.create_session("user_a", "todo status")
+        todo = self.repo.create_todo("user_a", session["id"], "review README")
+        completed = self.repo.complete_todo("user_a", todo["id"])
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["status"], "completed")
+        reopened = self.repo.reopen_todo("user_a", todo["id"])
+        self.assertIsNotNone(reopened)
+        self.assertEqual(reopened["status"], "pending")
+
+    def test_delete_session_removes_messages_and_trace_but_keeps_todos(self) -> None:
+        session = self.repo.create_session("user_a", "delete me")
+        self.repo.save_message(session["id"], "turn_delete", "user", "hello")
+        self.repo.save_trace("trace_delete", "turn_delete", session["id"], 1, "TEST_EVENT", {})
+        todo = self.repo.create_todo("user_a", session["id"], "keep business data")
+        deleted = self.repo.delete_session("user_a", session["id"])
+        self.assertTrue(deleted)
+        self.assertIsNone(self.repo.get_session("user_a", session["id"]))
+        self.assertEqual(self.repo.get_messages(session["id"]), [])
+        self.assertEqual(self.repo.get_trace("turn_delete"), [])
+        self.assertTrue(any(item["id"] == todo["id"] for item in self.repo.list_todos("user_a")))
+
     def test_max_steps_stops_controlled_loop(self) -> None:
         session = self.repo.create_session("user_a", "loop")
         runtime = self.runtime([tool_call("weather", {"city": "东京"}, f"call_{i}") for i in range(10)], max_steps=2)

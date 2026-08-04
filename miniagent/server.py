@@ -84,6 +84,29 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             if not todo:
                 return self._json(404, {"error": "TODO_NOT_FOUND"})
             return self._json(200, {"todo": todo})
+        if parsed.path.startswith("/api/todos/") and parsed.path.endswith("/reopen"):
+            parts = parsed.path.strip("/").split("/")
+            todo_id = parts[2] if len(parts) >= 3 else ""
+            user_id = body.get("user_id")
+            if not user_id or not todo_id:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and todo_id required"})
+            todo = self.runtime.repo.reopen_todo(user_id, todo_id)
+            if not todo:
+                return self._json(404, {"error": "TODO_NOT_FOUND"})
+            return self._json(200, {"todo": todo})
+        return self._json(404, {"error": "NOT_FOUND"})
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/sessions/"):
+            session_id = parsed.path.strip("/").split("/")[2]
+            user_id = parse_qs(parsed.query).get("user_id", [""])[0]
+            if not user_id or not session_id:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and session_id required"})
+            deleted = self.runtime.repo.delete_session(user_id, session_id)
+            if not deleted:
+                return self._json(404, {"error": "SESSION_NOT_FOUND"})
+            return self._json(200, {"deleted": True, "session_id": session_id})
         return self._json(404, {"error": "NOT_FOUND"})
 
     def _read_json(self) -> dict:
