@@ -10,10 +10,25 @@ from miniagent.tools.base import ToolContext, ToolResult, ToolValidationError, o
 
 
 RELATIVE_DAYS = {"今天": 0, "明天": 1, "后天": 2}
+CHINESE_DIGITS = {
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+NUMBER_TOKEN = r"\d{1,2}|[零〇一二两三四五六七八九十]{1,3}"
 TIME_PATTERN = re.compile(
     r"\s*(?P<period>凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*"
-    r"(?P<hour>\d{1,2})"
-    r"(?:\s*(?:点|:|：)\s*(?P<minute>\d{1,2})?)?"
+    rf"(?P<hour>{NUMBER_TOKEN})"
+    rf"(?:\s*(?:点|:|：)\s*(?:(?P<half>半)|(?P<minute>{NUMBER_TOKEN}))?)?"
 )
 
 
@@ -61,8 +76,10 @@ def _parse_time(match: re.Match[str] | None) -> time | None:
     if not match:
         return None
     period = match.group("period") or ""
-    hour = int(match.group("hour"))
-    minute = int(match.group("minute") or 0)
+    hour = _parse_number(match.group("hour"))
+    minute = 30 if match.group("half") else _parse_number(match.group("minute") or "0")
+    if hour is None or minute is None:
+        return None
     if minute > 59:
         return None
     if period in {"下午", "傍晚", "晚上"} and 1 <= hour < 12:
@@ -74,6 +91,24 @@ def _parse_time(match: re.Match[str] | None) -> time | None:
     if hour > 23:
         return None
     return time(hour=hour, minute=minute)
+
+
+def _parse_number(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    if value == "十":
+        return 10
+    if value.startswith("十"):
+        tail = value[1:]
+        return 10 + CHINESE_DIGITS.get(tail, 0)
+    if "十" in value:
+        head, tail = value.split("十", 1)
+        if head not in CHINESE_DIGITS:
+            return None
+        return CHINESE_DIGITS[head] * 10 + (CHINESE_DIGITS.get(tail, 0) if tail else 0)
+    if value in CHINESE_DIGITS:
+        return CHINESE_DIGITS[value]
+    return None
 
 
 def _format_due_at(target_date: date, parsed_time: time | None, tzinfo: Any) -> str:

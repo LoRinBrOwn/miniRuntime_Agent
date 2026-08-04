@@ -253,6 +253,11 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertEqual(second.data["created"]["title"], "2026-08-05 14:00 面试")
         self.assertEqual(second.data["created"]["due_at"], "2026-08-05T14:00:00+08:00")
 
+        third = tool.execute(tool.validate({"action": "create", "title": "明天五点到上海的高铁"}), ToolContext("user_a", session["id"]))
+        self.assertTrue(third.success)
+        self.assertEqual(third.data["created"]["title"], "2026-08-05 05:00 到上海的高铁")
+        self.assertEqual(third.data["created"]["due_at"], "2026-08-05T05:00:00+08:00")
+
     def test_delete_session_removes_messages_trace_and_session_todos(self) -> None:
         session = self.repo.create_session("user_a", "delete me")
         self.repo.save_message(session["id"], "turn_delete", "user", "hello")
