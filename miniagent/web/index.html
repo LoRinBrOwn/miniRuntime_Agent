@@ -462,7 +462,7 @@
       } else {
         $("messages").classList.remove("empty-view");
       }
-      $("messages").scrollTop = $("messages").scrollHeight;
+      scrollMessagesToBottom();
     }
 
     function renderEmptyState(type) {
@@ -483,6 +483,7 @@
           <p>${empty.body}</p>
         </div>
       `;
+      scrollMessagesToBottom();
     }
 
     async function completeTodo(todoId) {
@@ -527,6 +528,16 @@
         node.textContent = message.content;
       }
       $("messages").appendChild(node);
+      scrollMessagesToBottom();
+    }
+
+    function scrollMessagesToBottom() {
+      const messages = $("messages");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messages.scrollTop = messages.scrollHeight;
+        });
+      });
     }
 
     function isTodoUiMessage(message) {
