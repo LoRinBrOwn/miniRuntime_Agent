@@ -186,17 +186,38 @@
     .todo-card {
       display: flex;
       flex-direction: column;
+      gap: 10px;
+      white-space: normal;
+      max-width: min(680px, 92%);
+    }
+    .todo-card > strong {
+      font-size: 15px;
+    }
+    .todo-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .todo-list {
+      display: flex;
+      flex-direction: column;
       gap: 8px;
     }
     .todo-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
+      gap: 12px;
       align-items: center;
-      background: rgba(255, 255, 255, .62);
-      border: 1px solid rgba(79, 70, 48, .16);
+      background: #ffffff;
+      border: 1px solid var(--line);
       border-radius: 6px;
-      padding: 8px;
+      padding: 10px 12px;
+    }
+    .todo-row:hover {
+      border-color: #b7c4d8;
+    }
+    .todo-main {
+      min-width: 0;
     }
     .todo-actions {
       display: flex;
@@ -214,7 +235,7 @@
       color: var(--ok);
     }
     .todo-row.completed {
-      opacity: .62;
+      background: #f8fafc;
     }
     .todo-row.completed .todo-title {
       text-decoration: line-through;
@@ -223,11 +244,47 @@
     .todo-title {
       overflow-wrap: anywhere;
       line-height: 1.4;
+      font-weight: 700;
     }
     .todo-meta {
-      margin-top: 4px;
+      margin-top: 7px;
       color: var(--muted);
       font-size: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .todo-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: #41516a;
+      padding: 2px 7px;
+      line-height: 1.5;
+    }
+    .todo-pill.due {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .todo-pill.done {
+      border-color: #b7ead8;
+      background: #effcf7;
+      color: var(--ok);
+    }
+    .completed-group {
+      border-top: 1px dashed var(--line);
+      padding-top: 8px;
+    }
+    .completed-group summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+      user-select: none;
     }
     .empty {
       color: var(--muted);
@@ -432,7 +489,7 @@
         if (data.todos.length === 0) {
           return `<strong>Todo 列表</strong><div class="empty">当前会话暂无待办</div>`;
         }
-        return `<strong>Todo 列表</strong>${data.todos.map(renderTodoRow).join("")}`;
+        return `<strong>Todo 列表</strong>${renderTodoList(data.todos)}`;
       }
       const entries = [
         ["created", "已创建待办"],
@@ -441,7 +498,7 @@
       ];
       for (const [key, title] of entries) {
         if (data[key]) {
-          return `<strong>${title}</strong>${renderTodoRow(data[key])}`;
+          return `<strong>${title}</strong>${renderTodoList([data[key]], { showCompletedOpen: true })}`;
         }
       }
       return `<strong>Todo 结果</strong><pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
@@ -449,8 +506,8 @@
 
     function renderMarkdownTodoMessage(content, todos) {
       const text = stripMarkdownTodoTable(content).trim();
-      const textHtml = text ? `<div>${escapeHtml(text)}</div>` : "";
-      return `${textHtml}<strong>Todo 列表</strong>${todos.map(renderTodoRow).join("")}`;
+      const textHtml = text ? `<div class="todo-note">${escapeHtml(text)}</div>` : "";
+      return `${textHtml}<strong>Todo 列表</strong>${renderTodoList(todos)}`;
     }
 
     function parseMarkdownTodoTable(content) {
@@ -486,17 +543,41 @@
         .join("\n");
     }
 
+    function renderTodoList(todos, options = {}) {
+      const normalized = todos.map(normalizeTodoForDisplay);
+      const pending = normalized.filter((todo) => todo.status !== "completed");
+      const completed = normalized.filter((todo) => todo.status === "completed");
+      const pendingHtml = pending.length > 0
+        ? `<div class="todo-list">${pending.map(renderTodoRow).join("")}</div>`
+        : "";
+      if (completed.length === 0) {
+        return pendingHtml || `<div class="empty">暂无待办</div>`;
+      }
+      const completedRows = `<div class="todo-list">${completed.map(renderTodoRow).join("")}</div>`;
+      if (options.showCompletedOpen) {
+        return `${pendingHtml}${completedRows}`;
+      }
+      const completedHtml = `<details class="completed-group"><summary>已完成 ${completed.length} 项</summary>${completedRows}</details>`;
+      return `${pendingHtml || `<div class="empty">暂无待完成待办</div>`}${completedHtml}`;
+    }
+
     function renderTodoRow(todo) {
-      const viewTodo = normalizeTodoForDisplay(todo);
-      const action = viewTodo.status === "completed"
-        ? `<button class="undo" data-todo-action="reopen" data-todo-id="${escapeHtml(viewTodo.id)}">撤回</button>`
-        : `<button data-todo-action="complete" data-todo-id="${escapeHtml(viewTodo.id)}">完成</button>`;
-      const meta = [viewTodo.status, viewTodo.due_at ? `到期 ${viewTodo.due_at}` : "", viewTodo.source_session_id].filter(Boolean).join(" · ");
+      const statusText = todo.status === "completed" ? "已完成" : "待完成";
+      const action = todo.status === "completed"
+        ? `<button class="undo" data-todo-action="reopen" data-todo-id="${escapeHtml(todo.id)}">撤回</button>`
+        : `<button data-todo-action="complete" data-todo-id="${escapeHtml(todo.id)}">完成</button>`;
+      const dueText = formatTodoDateTime(todo.due_at);
+      const createdText = formatTodoDateTime(todo.created_at);
+      const meta = [
+        `<span class="todo-pill ${todo.status === "completed" ? "done" : ""}">${statusText}</span>`,
+        dueText ? `<span class="todo-pill due">到期 ${escapeHtml(dueText)}</span>` : "",
+        createdText ? `<span class="todo-pill">创建 ${escapeHtml(createdText)}</span>` : "",
+      ].filter(Boolean).join("");
       return `
-        <div class="todo-row ${viewTodo.status === "completed" ? "completed" : ""}">
-          <div>
-            <div class="todo-title">${escapeHtml(viewTodo.title)}</div>
-            <div class="todo-meta">${escapeHtml(meta)}</div>
+        <div class="todo-row ${todo.status === "completed" ? "completed" : ""}">
+          <div class="todo-main">
+            <div class="todo-title">${escapeHtml(todo.title)}</div>
+            <div class="todo-meta">${meta}</div>
           </div>
           <div class="todo-actions">${action}</div>
         </div>
@@ -523,6 +604,14 @@
         title: replaceTodoTitle(String(todo.title), match.index, replaceEnd, replacement),
         due_at: parsedTime ? `${dateText}T${parsedTime}:00+08:00` : dateText
       };
+    }
+
+    function formatTodoDateTime(value) {
+      if (!value) return "";
+      const text = String(value);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+      if (text.includes("T")) return text.slice(0, 16).replace("T", " ");
+      return text;
     }
 
     function getDatePartsInTimeZone(date, timeZone) {
