@@ -12,12 +12,12 @@ from miniagent.tools.todo import TodoTool
 from miniagent.tools.weather import MockWeatherTool
 
 
-def build_registry(repo: SQLiteRepository) -> ToolRegistry:
+def build_registry(repo: SQLiteRepository, timezone: str = "Asia/Shanghai") -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(SafeCalculator())
     registry.register(MockSearchTool())
     registry.register(MockWeatherTool())
-    registry.register(TodoTool(repo))
+    registry.register(TodoTool(repo, timezone=timezone))
     return registry
 
 
@@ -25,12 +25,13 @@ def build_runtime(settings: Settings | None = None) -> AgentRuntime:
     settings = settings or load_settings()
     repo = SQLiteRepository(settings.database_url)
     llm = OpenAICompatibleClient(settings.llm_base_url, settings.llm_api_key, settings.llm_model, settings.llm_timeout_seconds)
-    registry = build_registry(repo)
+    registry = build_registry(repo, settings.timezone)
     context = ContextManager(
         repo,
         recent_message_limit=settings.recent_message_limit,
         summary_trigger_messages=settings.summary_trigger_messages,
         context_max_chars=settings.context_max_chars,
+        timezone=settings.timezone,
     )
     return AgentRuntime(
         repo=repo,

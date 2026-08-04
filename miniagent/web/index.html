@@ -438,11 +438,12 @@
       const action = todo.status === "completed"
         ? `<button class="undo" data-todo-action="reopen" data-todo-id="${escapeHtml(todo.id)}">撤回</button>`
         : `<button data-todo-action="complete" data-todo-id="${escapeHtml(todo.id)}">完成</button>`;
+      const meta = [todo.status, todo.due_at ? `到期 ${todo.due_at}` : "", todo.source_session_id].filter(Boolean).join(" · ");
       return `
         <div class="todo-row ${todo.status === "completed" ? "completed" : ""}">
           <div>
             <div class="todo-title">${escapeHtml(todo.title)}</div>
-            <div class="todo-meta">${escapeHtml(todo.status)} · ${escapeHtml(todo.source_session_id)}</div>
+            <div class="todo-meta">${escapeHtml(meta)}</div>
           </div>
           <div class="todo-actions">${action}</div>
         </div>

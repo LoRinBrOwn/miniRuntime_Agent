@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from miniagent.llm.fake import SequenceFakeLLM
@@ -10,6 +11,7 @@ from miniagent.runtime.agent import AgentRuntime
 from miniagent.runtime.context import ContextManager
 from miniagent.session.repository import SQLiteRepository
 from miniagent.tools.calculator import SafeCalculator
+from miniagent.tools.base import ToolContext
 from miniagent.tools.registry import ToolRegistry
 from miniagent.tools.search import MockSearchTool
 from miniagent.tools.todo import TodoTool
@@ -235,6 +237,21 @@ class RuntimeTestCase(unittest.TestCase):
         completed = self.repo.complete_todo("user_a", todo_1["id"], s1["id"])
         self.assertIsNotNone(completed)
         self.assertEqual(completed["status"], "completed")
+
+    def test_todo_tool_normalizes_relative_due_dates(self) -> None:
+        session = self.repo.create_session("user_a", "relative todo")
+        fixed_now = lambda: datetime(2026, 8, 4, 9, 0, tzinfo=timezone(timedelta(hours=8)))
+        tool = TodoTool(self.repo, now_provider=fixed_now)
+
+        first = tool.execute(tool.validate({"action": "create", "title": "明天去上海"}), ToolContext("user_a", session["id"]))
+        second = tool.execute(tool.validate({"action": "create", "title": "明天下午2点面试"}), ToolContext("user_a", session["id"]))
+
+        self.assertTrue(first.success)
+        self.assertEqual(first.data["created"]["title"], "2026-08-05 去上海")
+        self.assertEqual(first.data["created"]["due_at"], "2026-08-05")
+        self.assertTrue(second.success)
+        self.assertEqual(second.data["created"]["title"], "2026-08-05 14:00 面试")
+        self.assertEqual(second.data["created"]["due_at"], "2026-08-05T14:00:00+08:00")
 
     def test_delete_session_removes_messages_trace_and_session_todos(self) -> None:
         session = self.repo.create_session("user_a", "delete me")

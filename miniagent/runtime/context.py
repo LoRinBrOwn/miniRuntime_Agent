@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from miniagent.session.repository import SQLiteRepository
 
@@ -39,11 +41,13 @@ class ContextManager:
         recent_message_limit: int = 20,
         summary_trigger_messages: int = 30,
         context_max_chars: int = 24000,
+        timezone: str = "Asia/Shanghai",
     ) -> None:
         self.repo = repo
         self.recent_message_limit = recent_message_limit
         self.summary_trigger_messages = summary_trigger_messages
         self.context_max_chars = context_max_chars
+        self.timezone = timezone
 
     def build(self, session_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         summary = self.repo.get_summary(session_id)
@@ -97,9 +101,22 @@ class ContextManager:
         }
 
     def _system_content(self, summary: dict[str, Any]) -> str:
+        now = self._now()
+        time_hint = (
+            f"\nCurrent local datetime: {now.isoformat()} ({self.timezone}). "
+            "When the user says relative dates such as 今天, 明天, 后天, or 明天下午2点, "
+            "resolve them against this date before calling tools. For todo create, prefer "
+            "an absolute title and pass due_at when a date or time can be inferred."
+        )
         if summary:
-            return SYSTEM_PROMPT + "\nSession summary JSON:\n" + json.dumps(summary, ensure_ascii=False)
-        return SYSTEM_PROMPT
+            return SYSTEM_PROMPT + time_hint + "\nSession summary JSON:\n" + json.dumps(summary, ensure_ascii=False)
+        return SYSTEM_PROMPT + time_hint
+
+    def _now(self) -> datetime:
+        try:
+            return datetime.now(ZoneInfo(self.timezone))
+        except ZoneInfoNotFoundError:
+            return datetime.now().astimezone()
 
     def _trim(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         total = sum(len(str(item.get("content", ""))) for item in messages)

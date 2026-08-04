@@ -1,9 +1,102 @@
 from __future__ import annotations
 
-from typing import Any
+import re
+from datetime import date, datetime, time, timedelta
+from typing import Any, Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from miniagent.session.repository import SQLiteRepository
 from miniagent.tools.base import ToolContext, ToolResult, ToolValidationError, optional_str, require_str
+
+
+RELATIVE_DAYS = {"今天": 0, "明天": 1, "后天": 2}
+TIME_PATTERN = re.compile(
+    r"\s*(?P<period>凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*"
+    r"(?P<hour>\d{1,2})"
+    r"(?:\s*(?:点|:|：)\s*(?P<minute>\d{1,2})?)?"
+)
+
+
+def normalize_todo_due(
+    title: str,
+    due_at: str | None = None,
+    timezone: str = "Asia/Shanghai",
+    now_provider: Callable[[], datetime] | None = None,
+) -> tuple[str, str | None]:
+    clean_title = title.strip()
+    clean_due_at = due_at.strip() if isinstance(due_at, str) and due_at.strip() else None
+    match = re.search("|".join(RELATIVE_DAYS), clean_title)
+    if not match:
+        return clean_title, clean_due_at
+
+    now = _current_time(timezone, now_provider)
+    target_date = now.date() + timedelta(days=RELATIVE_DAYS[match.group(0)])
+    time_match = TIME_PATTERN.match(clean_title[match.end() :])
+    parsed_time = _parse_time(time_match)
+    inferred_due_at = _format_due_at(target_date, parsed_time, now.tzinfo)
+    resolved_due_at = clean_due_at or inferred_due_at
+    replacement = _display_due_at(resolved_due_at)
+    replace_end = match.end() + (time_match.end() if parsed_time and time_match else 0)
+    normalized_title = _replace_with_spacing(clean_title, match.start(), replace_end, replacement)
+    return normalized_title, resolved_due_at
+
+
+def _current_time(timezone: str, now_provider: Callable[[], datetime] | None) -> datetime:
+    if now_provider:
+        now = now_provider()
+    else:
+        try:
+            now = datetime.now(ZoneInfo(timezone))
+        except ZoneInfoNotFoundError:
+            now = datetime.now().astimezone()
+    if now.tzinfo is None:
+        try:
+            return now.replace(tzinfo=ZoneInfo(timezone))
+        except ZoneInfoNotFoundError:
+            return now.astimezone()
+    return now
+
+
+def _parse_time(match: re.Match[str] | None) -> time | None:
+    if not match:
+        return None
+    period = match.group("period") or ""
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute") or 0)
+    if minute > 59:
+        return None
+    if period in {"下午", "傍晚", "晚上"} and 1 <= hour < 12:
+        hour += 12
+    elif period == "中午" and 1 <= hour < 12:
+        hour += 12
+    elif period in {"凌晨", "早上", "上午"} and hour == 12:
+        hour = 0
+    if hour > 23:
+        return None
+    return time(hour=hour, minute=minute)
+
+
+def _format_due_at(target_date: date, parsed_time: time | None, tzinfo: Any) -> str:
+    if parsed_time is None:
+        return target_date.isoformat()
+    return datetime.combine(target_date, parsed_time, tzinfo=tzinfo).isoformat()
+
+
+def _display_due_at(due_at: str) -> str:
+    if "T" in due_at:
+        return due_at[:16].replace("T", " ")
+    return due_at[:10]
+
+
+def _replace_with_spacing(text: str, start: int, end: int, replacement: str) -> str:
+    prefix = text[:start].rstrip()
+    suffix = text[end:].lstrip()
+    if not suffix:
+        left_separator = "" if not prefix or prefix[-1] in " ，,。.;；:：" else " "
+        return (prefix + left_separator + replacement).strip()
+    left_separator = "" if not prefix or prefix[-1] in " ，,。.;；:：" else " "
+    right_separator = "" if suffix[0] in "，,。.;；:：" else " "
+    return (prefix + left_separator + replacement + right_separator + suffix).strip()
 
 
 class TodoTool:
@@ -14,6 +107,7 @@ class TodoTool:
         "properties": {
             "action": {"type": "string", "enum": ["create", "list", "complete"], "description": "Todo operation"},
             "title": {"type": "string", "description": "Todo title, required for create"},
+            "due_at": {"type": "string", "description": "Optional absolute due date or datetime for create"},
             "todo_id": {"type": "string", "description": "Todo id, required for complete"},
             "status": {"type": "string", "enum": ["pending", "completed"], "description": "Optional list filter"},
         },
@@ -21,8 +115,15 @@ class TodoTool:
         "additionalProperties": False,
     }
 
-    def __init__(self, repo: SQLiteRepository) -> None:
+    def __init__(
+        self,
+        repo: SQLiteRepository,
+        timezone: str = "Asia/Shanghai",
+        now_provider: Callable[[], datetime] | None = None,
+    ) -> None:
         self.repo = repo
+        self.timezone = timezone
+        self.now_provider = now_provider
 
     def validate(self, raw_arguments: dict[str, Any]) -> dict[str, Any]:
         action = require_str(raw_arguments, "action")
@@ -31,6 +132,7 @@ class TodoTool:
         args: dict[str, Any] = {"action": action}
         if action == "create":
             args["title"] = require_str(raw_arguments, "title")
+            args["due_at"] = optional_str(raw_arguments, "due_at")
         if action == "complete":
             args["todo_id"] = require_str(raw_arguments, "todo_id")
         status = optional_str(raw_arguments, "status")
@@ -43,7 +145,13 @@ class TodoTool:
     def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         action = arguments["action"]
         if action == "create":
-            todo = self.repo.create_todo(context.user_id, context.session_id, arguments["title"])
+            title, due_at = normalize_todo_due(
+                arguments["title"],
+                arguments.get("due_at"),
+                self.timezone,
+                self.now_provider,
+            )
+            todo = self.repo.create_todo(context.user_id, context.session_id, title, due_at)
             return ToolResult(True, {"created": todo})
         if action == "list":
             todos = self.repo.list_todos(context.user_id, arguments.get("status"), context.session_id)

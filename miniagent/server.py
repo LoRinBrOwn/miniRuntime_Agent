@@ -9,6 +9,7 @@ from miniagent.config import load_settings
 from miniagent.factory import build_runtime
 from miniagent.ids import new_id
 from miniagent.runtime.agent import SessionBusyError
+from miniagent.tools.todo import normalize_todo_due
 
 
 class MiniAgentHandler(BaseHTTPRequestHandler):
@@ -72,11 +73,13 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             user_id = body.get("user_id")
             title = body.get("title")
             session_id = body.get("session_id")
+            due_at = body.get("due_at")
             if not user_id or not title:
                 return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and title required"})
             if not session_id or not self.runtime.repo.get_session(user_id, session_id):
                 return self._json(403, {"error": "SESSION_FORBIDDEN"})
-            todo = self.runtime.repo.create_todo(user_id, session_id, title)
+            title, due_at = normalize_todo_due(title, due_at, self.runtime.context_manager.timezone)
+            todo = self.runtime.repo.create_todo(user_id, session_id, title, due_at)
             self._save_todo_operation_message(session_id, {"created": todo})
             return self._json(200, {"todo": todo})
         if parsed.path == "/api/todos/list":

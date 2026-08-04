@@ -7,6 +7,7 @@
 - Agent Loop：`LLM -> tool -> observation -> LLM -> final`，支持最大步数和重复工具调用保护。
 - 工具注册：每个工具包含 `name`、`description`、JSON Schema 和 `execute`。
 - 工具：`calculator`、`search`、`weather`、`todo` 共 4 个。
+- 时间感知：system context 注入当前本地时间，`todo` 会把“明天/后天/下午2点”等相对时间归一到绝对日期和 `due_at`。
 - Session：`user_id + session_id` 双键隔离，同一用户多个窗口的对话上下文互不串线。
 - 持久化：SQLite 保存 session、message、todo、trace、summary。
 - Context：固定系统规则 + session 摘要 + 最近消息窗口 + 当前输入；超过阈值触发基础压缩。
@@ -27,6 +28,7 @@ copy .env.example .env
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=你的 key
 LLM_MODEL=gpt-4.1-mini
+TIMEZONE=Asia/Shanghai
 ```
 
 启动 Web/API：
