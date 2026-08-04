@@ -155,6 +155,7 @@ class SQLiteRepository:
                 return False
             conn.execute("DELETE FROM trace_events WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM todos WHERE user_id=? AND source_session_id=?", (user_id, session_id))
             conn.execute("DELETE FROM sessions WHERE id=? AND user_id=?", (session_id, user_id))
         return True
 
@@ -241,32 +242,41 @@ class SQLiteRepository:
             )
         return todo
 
-    def list_todos(self, user_id: str, status: str | None = None) -> list[dict[str, Any]]:
+    def list_todos(self, user_id: str, status: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:
+        clauses = ["user_id=?"]
+        params: list[Any] = [user_id]
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        if session_id:
+            clauses.append("source_session_id=?")
+            params.append(session_id)
+        where = " AND ".join(clauses)
         with self.connect() as conn:
-            if status:
-                rows = conn.execute(
-                    "SELECT * FROM todos WHERE user_id=? AND status=? ORDER BY created_at DESC",
-                    (user_id, status),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM todos WHERE user_id=? ORDER BY created_at DESC",
-                    (user_id,),
-                ).fetchall()
+            rows = conn.execute(
+                f"SELECT * FROM todos WHERE {where} ORDER BY created_at DESC",
+                tuple(params),
+            ).fetchall()
         return [dict(row) for row in rows]
 
-    def complete_todo(self, user_id: str, todo_id: str) -> dict[str, Any] | None:
-        return self.set_todo_status(user_id, todo_id, "completed")
+    def complete_todo(self, user_id: str, todo_id: str, session_id: str | None = None) -> dict[str, Any] | None:
+        return self.set_todo_status(user_id, todo_id, "completed", session_id)
 
-    def reopen_todo(self, user_id: str, todo_id: str) -> dict[str, Any] | None:
-        return self.set_todo_status(user_id, todo_id, "pending")
+    def reopen_todo(self, user_id: str, todo_id: str, session_id: str | None = None) -> dict[str, Any] | None:
+        return self.set_todo_status(user_id, todo_id, "pending", session_id)
 
-    def set_todo_status(self, user_id: str, todo_id: str, status: str) -> dict[str, Any] | None:
+    def set_todo_status(self, user_id: str, todo_id: str, status: str, session_id: str | None = None) -> dict[str, Any] | None:
         if status not in {"pending", "completed"}:
             raise ValueError("todo status must be pending or completed")
         now = utc_now()
         with self.connect() as conn:
-            row = conn.execute("SELECT * FROM todos WHERE id=? AND user_id=?", (todo_id, user_id)).fetchone()
+            if session_id:
+                row = conn.execute(
+                    "SELECT * FROM todos WHERE id=? AND user_id=? AND source_session_id=?",
+                    (todo_id, user_id, session_id),
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT * FROM todos WHERE id=? AND user_id=?", (todo_id, user_id)).fetchone()
             if not row:
                 return None
             conn.execute("UPDATE todos SET status=?, updated_at=? WHERE id=?", (status, now, todo_id))

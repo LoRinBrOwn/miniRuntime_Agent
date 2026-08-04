@@ -224,7 +224,19 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertIsNotNone(reopened)
         self.assertEqual(reopened["status"], "pending")
 
-    def test_delete_session_removes_messages_and_trace_but_keeps_todos(self) -> None:
+    def test_todos_are_session_scoped(self) -> None:
+        s1 = self.repo.create_session("user_a", "todo window 1")
+        s2 = self.repo.create_session("user_a", "todo window 2")
+        todo_1 = self.repo.create_todo("user_a", s1["id"], "session one task")
+        todo_2 = self.repo.create_todo("user_a", s2["id"], "session two task")
+        self.assertEqual([item["id"] for item in self.repo.list_todos("user_a", session_id=s1["id"])], [todo_1["id"]])
+        self.assertEqual([item["id"] for item in self.repo.list_todos("user_a", session_id=s2["id"])], [todo_2["id"]])
+        self.assertIsNone(self.repo.complete_todo("user_a", todo_1["id"], s2["id"]))
+        completed = self.repo.complete_todo("user_a", todo_1["id"], s1["id"])
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed["status"], "completed")
+
+    def test_delete_session_removes_messages_trace_and_session_todos(self) -> None:
         session = self.repo.create_session("user_a", "delete me")
         self.repo.save_message(session["id"], "turn_delete", "user", "hello")
         self.repo.save_trace("trace_delete", "turn_delete", session["id"], 1, "TEST_EVENT", {})
@@ -234,7 +246,7 @@ class RuntimeTestCase(unittest.TestCase):
         self.assertIsNone(self.repo.get_session("user_a", session["id"]))
         self.assertEqual(self.repo.get_messages(session["id"]), [])
         self.assertEqual(self.repo.get_trace("turn_delete"), [])
-        self.assertTrue(any(item["id"] == todo["id"] for item in self.repo.list_todos("user_a")))
+        self.assertFalse(any(item["id"] == todo["id"] for item in self.repo.list_todos("user_a")))
 
     def test_max_steps_stops_controlled_loop(self) -> None:
         session = self.repo.create_session("user_a", "loop")

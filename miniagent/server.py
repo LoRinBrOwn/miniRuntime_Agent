@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 from miniagent.config import load_settings
 from miniagent.factory import build_runtime
+from miniagent.ids import new_id
 from miniagent.runtime.agent import SessionBusyError
 
 
@@ -32,9 +33,12 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query)
             user_id = query.get("user_id", [""])[0]
             status = query.get("status", [None])[0]
-            if not user_id:
-                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id required"})
-            return self._json(200, {"todos": self.runtime.repo.list_todos(user_id, status)})
+            session_id = query.get("session_id", [None])[0]
+            if not user_id or not session_id:
+                return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and session_id required"})
+            if not self.runtime.repo.get_session(user_id, session_id):
+                return self._json(403, {"error": "SESSION_FORBIDDEN"})
+            return self._json(200, {"todos": self.runtime.repo.list_todos(user_id, status, session_id)})
         if parsed.path.startswith("/api/turns/") and parsed.path.endswith("/trace"):
             turn_id = parsed.path.split("/")[3]
             return self._json(200, {"events": self.runtime.repo.get_trace(turn_id)})
@@ -67,12 +71,13 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/todos":
             user_id = body.get("user_id")
             title = body.get("title")
-            session_id = body.get("session_id") or "manual"
+            session_id = body.get("session_id")
             if not user_id or not title:
                 return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and title required"})
-            if session_id != "manual" and not self.runtime.repo.get_session(user_id, session_id):
+            if not session_id or not self.runtime.repo.get_session(user_id, session_id):
                 return self._json(403, {"error": "SESSION_FORBIDDEN"})
             todo = self.runtime.repo.create_todo(user_id, session_id, title)
+            self._save_todo_operation_message(session_id, "created", todo)
             return self._json(200, {"todo": todo})
         if parsed.path.startswith("/api/todos/") and parsed.path.endswith("/complete"):
             parts = parsed.path.strip("/").split("/")
@@ -80,9 +85,13 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             user_id = body.get("user_id")
             if not user_id or not todo_id:
                 return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and todo_id required"})
-            todo = self.runtime.repo.complete_todo(user_id, todo_id)
+            session_id = body.get("session_id")
+            if not session_id or not self.runtime.repo.get_session(user_id, session_id):
+                return self._json(403, {"error": "SESSION_FORBIDDEN"})
+            todo = self.runtime.repo.complete_todo(user_id, todo_id, session_id)
             if not todo:
                 return self._json(404, {"error": "TODO_NOT_FOUND"})
+            self._save_todo_operation_message(session_id, "completed", todo)
             return self._json(200, {"todo": todo})
         if parsed.path.startswith("/api/todos/") and parsed.path.endswith("/reopen"):
             parts = parsed.path.strip("/").split("/")
@@ -90,9 +99,13 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
             user_id = body.get("user_id")
             if not user_id or not todo_id:
                 return self._json(400, {"error": "INVALID_REQUEST", "message": "user_id and todo_id required"})
-            todo = self.runtime.repo.reopen_todo(user_id, todo_id)
+            session_id = body.get("session_id")
+            if not session_id or not self.runtime.repo.get_session(user_id, session_id):
+                return self._json(403, {"error": "SESSION_FORBIDDEN"})
+            todo = self.runtime.repo.reopen_todo(user_id, todo_id, session_id)
             if not todo:
                 return self._json(404, {"error": "TODO_NOT_FOUND"})
+            self._save_todo_operation_message(session_id, "reopened", todo)
             return self._json(200, {"todo": todo})
         return self._json(404, {"error": "NOT_FOUND"})
 
@@ -120,6 +133,19 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _save_todo_operation_message(self, session_id: str, action_key: str, todo: dict) -> None:
+        turn_id = new_id("turn")
+        content = json.dumps({"success": True, "data": {action_key: todo}, "error": None}, ensure_ascii=False)
+        self.runtime.repo.save_message(
+            session_id,
+            turn_id,
+            "tool",
+            content,
+            message_type="tool_result",
+            tool_name="todo",
+            tool_call_id=new_id("manual_todo"),
+        )
 
     def _file(self, path: str, content_type: str) -> None:
         data = Path(path).read_bytes()

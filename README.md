@@ -41,7 +41,7 @@ python -m miniagent.server
 http://127.0.0.1:8000
 ```
 
-Web 页面包含会话列表、聊天区、Todo 工具面板和 Trace 面板。你可以通过聊天让 Agent 创建待办，也可以在右侧 Todo 面板里手动添加或点击完成。
+Web 页面包含会话列表、聊天区和 Trace 面板。Todo 不再作为全局侧边栏常驻展示，而是作为当前会话中的工具结果卡片显示；你可以在聊天里让 Agent 创建、查询待办，并在聊天卡片里点击完成或撤回。
 
 健康检查：
 
@@ -148,22 +148,22 @@ flowchart LR
 - `calculator`：使用 Python AST 白名单解释表达式，不使用 `eval`。
 - `search`：检索 `data/search_docs.json`，稳定可测。
 - `weather`：读取 `data/weather.json`，支持城市别名。
-- `todo`：用户级业务数据，记录 `source_session_id`。
+- `todo`：会话级待办数据，按 `user_id + source_session_id` 隔离。
 
 工具失败不会导致进程崩溃；失败结果作为 tool observation 返回给模型，由模型修正参数或解释限制。
 
-## Session 与 Memory召回
+## Session 与 Memory 召回
 
 Session 隔离指对话历史、摘要和当前上下文按 `user_id + session_id` 隔离。用户 A 的窗口 1 与窗口 2 可以随时继续，但构建 context 时只读取当前 session 的消息和摘要。
 
-Todo 是业务数据，按 `user_id` 隔离，不按 session 隔离；原因是待办天然属于用户级数据。为了可追踪，todo 会记录 `source_session_id`。
+Todo 按 `user_id + source_session_id` 隔离。每个会话只显示和操作自己创建的待办，切换会话不会看到其他会话的 Todo 卡片或列表。
 
 Memory 召回时机：
 
 - 每次 LLM 调用都会注入当前 session 的结构化摘要。
 - 每次 LLM 调用都会注入最近 N 条原文消息，默认 `RECENT_MESSAGE_LIMIT=20`。
 - 工具结果作为 `tool` role 消息进入近期窗口，支持“那武汉呢？”、“再除以 4”这类追问。
-- Todo 不直接塞进 system prompt，只有模型主动调用 `todo` 的 `list` action 时才召回。
+- Todo 不直接塞进 system prompt，只有模型在当前会话主动调用 `todo` 的 `list` action 时，才以工具结果卡片形式召回当前会话的待办。
 
 压缩触发：
 
@@ -211,4 +211,3 @@ Memory 召回时机：
 - 最大步数：返回 `max_steps_exceeded`。
 - 连续 3 次相同工具调用：返回 `repeated_tool_call`。
 - 同一 session 并发：进程内 lock，返回 `SESSION_BUSY`。
-

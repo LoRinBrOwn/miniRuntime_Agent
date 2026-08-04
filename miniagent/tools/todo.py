@@ -8,7 +8,7 @@ from miniagent.tools.base import ToolContext, ToolResult, ToolValidationError, o
 
 class TodoTool:
     name = "todo"
-    description = "Create, list, or complete todos. Todos are user scoped and record the source session."
+    description = "Create, list, or complete todos in the current session. Todos are isolated by user and session."
     args_schema = {
         "type": "object",
         "properties": {
@@ -46,10 +46,10 @@ class TodoTool:
             todo = self.repo.create_todo(context.user_id, context.session_id, arguments["title"])
             return ToolResult(True, {"created": todo})
         if action == "list":
-            todos = self.repo.list_todos(context.user_id, arguments.get("status"))
+            todos = self.repo.list_todos(context.user_id, arguments.get("status"), context.session_id)
             return ToolResult(True, {"todos": todos})
         if action == "complete":
-            todo = self.repo.complete_todo(context.user_id, arguments["todo_id"])
+            todo = self.repo.complete_todo(context.user_id, arguments["todo_id"], context.session_id)
             if not todo:
                 return ToolResult(False, error="todo not found")
             return ToolResult(True, {"completed": todo})
