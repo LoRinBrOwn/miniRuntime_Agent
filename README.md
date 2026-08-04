@@ -51,6 +51,10 @@ Web 页面包含会话列表、聊天区和 Trace 面板。Todo 不再作为全�
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health
 ```
 
+## 演示视频
+
+[MiniAgent Runtime 操作录屏](./assets/demo.mp4)
+
 ## 测试
 
 当前环境无需安装 pytest，可以直接运行：
