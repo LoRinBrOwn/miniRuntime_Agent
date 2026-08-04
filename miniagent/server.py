@@ -154,9 +154,9 @@ class MiniAgentHandler(BaseHTTPRequestHandler):
         self.runtime.repo.save_message(
             session_id,
             turn_id,
-            "tool",
+            "assistant",
             content,
-            message_type="tool_result",
+            message_type="todo_ui",
             tool_name="todo",
             tool_call_id=new_id("manual_todo"),
         )

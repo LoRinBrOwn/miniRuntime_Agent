@@ -381,27 +381,40 @@
     function addMessage(message) {
       const node = document.createElement("div");
       node.className = `msg ${message.role}`;
-      if (message.role === "tool" && message.tool_name === "todo") {
-        node.className = "msg tool todo-card";
+      if (message.message_type === "tool_call") {
+        return;
+      }
+      const markdownTodos = message.role === "assistant" ? parseMarkdownTodoTable(message.content) : [];
+      if (isTodoUiMessage(message)) {
+        node.className = "msg assistant todo-card";
         node.innerHTML = renderTodoMessage(message);
-        node.querySelectorAll("[data-todo-action]").forEach((button) => {
-          button.onclick = async () => {
-            if (button.dataset.todoAction === "complete") {
-              await completeTodo(button.dataset.todoId);
-            } else if (button.dataset.todoAction === "reopen") {
-              await reopenTodo(button.dataset.todoId);
-            }
-          };
-        });
+        bindTodoActions(node);
+      } else if (markdownTodos.length > 0) {
+        node.className = "msg assistant todo-card";
+        node.innerHTML = renderMarkdownTodoMessage(message.content, markdownTodos);
+        bindTodoActions(node);
       } else if (message.role === "tool") {
         node.textContent = `[${message.tool_name}] ${message.content}`;
-      } else if (message.message_type === "tool_call") {
-        node.className = "msg tool";
-        node.textContent = `[tool_call] ${message.content}`;
       } else {
         node.textContent = message.content;
       }
       $("messages").appendChild(node);
+    }
+
+    function isTodoUiMessage(message) {
+      return (message.role === "tool" && message.tool_name === "todo") || message.message_type === "todo_ui";
+    }
+
+    function bindTodoActions(node) {
+      node.querySelectorAll("[data-todo-action]").forEach((button) => {
+        button.onclick = async () => {
+          if (button.dataset.todoAction === "complete") {
+            await completeTodo(button.dataset.todoId);
+          } else if (button.dataset.todoAction === "reopen") {
+            await reopenTodo(button.dataset.todoId);
+          }
+        };
+      });
     }
 
     function renderTodoMessage(message) {
@@ -432,6 +445,45 @@
         }
       }
       return `<strong>Todo 结果</strong><pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+    }
+
+    function renderMarkdownTodoMessage(content, todos) {
+      const text = stripMarkdownTodoTable(content).trim();
+      const textHtml = text ? `<div>${escapeHtml(text)}</div>` : "";
+      return `${textHtml}<strong>Todo 列表</strong>${todos.map(renderTodoRow).join("")}`;
+    }
+
+    function parseMarkdownTodoTable(content) {
+      if (!content || !content.includes("todo_")) return [];
+      const todos = [];
+      String(content).split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("|") || trimmed.includes("---")) return;
+        const cells = trimmed.split("|").slice(1, -1).map((cell) => cell.trim());
+        const idIndex = cells.findIndex((cell) => /`?todo_[A-Za-z0-9_]+`?/.test(cell));
+        if (idIndex < 0 || idIndex + 1 >= cells.length || cells.length < 3) return;
+        const rawId = cells[idIndex].match(/todo_[A-Za-z0-9_]+/)[0];
+        const title = cells[idIndex + 1] || "未命名待办";
+        const statusText = cells.join(" ");
+        todos.push({
+          id: rawId,
+          title: title.replace(/`/g, ""),
+          status: /已完成|completed|done/i.test(statusText) ? "completed" : "pending",
+          source_session_id: activeSession,
+          due_at: ""
+        });
+      });
+      return todos;
+    }
+
+    function stripMarkdownTodoTable(content) {
+      return String(content)
+        .split(/\r?\n/)
+        .filter((line) => {
+          const trimmed = line.trim();
+          return !trimmed.startsWith("|");
+        })
+        .join("\n");
     }
 
     function renderTodoRow(todo) {
